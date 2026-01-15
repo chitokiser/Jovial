@@ -1,0 +1,51 @@
+<!-- /orders.html -->
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>내 주문 - Photograce DB</title>
+
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <link rel="stylesheet" href="/assets/css/header.css" />
+  <link rel="stylesheet" href="/assets/css/footer.css" />
+  <link rel="stylesheet" href="/assets/css/pages/orders.css" />
+
+  <script src="/assets/js/partials.js"></script>
+
+  <!-- firebase (module) -->
+  <script type="module" src="/assets/js/firebase-init.js"></script>
+  <script type="module" src="/assets/js/firestore-bridge.js"></script>
+</head>
+<body>
+  <div id="siteHeader"></div>
+
+  <main class="page">
+    <section class="hero">
+      <div class="hero-inner">
+        <h1 class="hero-title">내 주문</h1>
+        <p class="hero-desc">주문요청을 생성하면 여기서 목록/상태를 확인할 수 있습니다.</p>
+
+        <section class="panel">
+          <div class="panel-h">
+            <div class="dot"></div>
+            <div class="panel-title">주문 목록</div>
+            <div class="spacer"></div>
+            <button class="btn btn-sm" id="btnReload">새로고침</button>
+          </div>
+          <div class="panel-b">
+            <div class="list" id="list"></div>
+            <div class="mini" id="hint"></div>
+          </div>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <div id="siteFooter"></div>
+
+  <script type="module" src="/assets/js/header-auth.js"></script>
+  <script type="module" src="/assets/js/pages/orders.js"></script>
+</body>
+</html>

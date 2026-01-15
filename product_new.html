@@ -1,0 +1,116 @@
+<!-- /product_new.html -->
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>상품 등록 | Photograce DB</title>
+
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <link rel="stylesheet" href="/assets/css/header.css" />
+  <link rel="stylesheet" href="/assets/css/footer.css" />
+  <link rel="stylesheet" href="/assets/css/pages/product_new.css" />
+
+  <!-- partials loader -->
+  <script src="/assets/js/partials.js"></script>
+
+  <!-- firebase (module) -->
+  <script type="module" src="/assets/js/firebase-init.js"></script>
+  <script type="module" src="/assets/js/firestore-bridge.js"></script>
+
+  <!-- header role/menu binding -->
+  <script type="module" src="/assets/js/header-auth.js"></script>
+</head>
+
+<body>
+  <div id="siteHeader"></div>
+
+  <main class="page">
+    <section class="hero">
+      <div class="hero-inner">
+        <a class="back" href="./my_products.html">← 내 상품</a>
+
+        <h1 class="hero-title">상품 등록</h1>
+        <p class="hero-desc">등록하면 상태가 pending(검수중)으로 들어가며, 관리자가 승인하면 published로 공개됩니다.</p>
+
+        <section class="panel">
+          <div class="panel-body">
+            <form class="form" id="formProduct">
+              <label class="field">
+                <span class="label">상품명</span>
+                <input class="input" id="pTitle" required placeholder="예: 다낭 야경 투어" />
+              </label>
+
+              <label class="field">
+                <span class="label">카테고리</span>
+                <select class="select" id="pCategory" required>
+                  <option value="">선택</option>
+                  <option value="spa">스파</option>
+                  <option value="massage">마사지</option>
+                  <option value="beauty">뷰티/에스테틱</option>
+                  <option value="ticket">티켓/입장권</option>
+                  <option value="tour">투어</option>
+                  <option value="nature">자연/액티비티</option>
+                  <option value="cruise">크루즈/요트</option>
+                  <option value="food">맛집</option>
+                  <option value="cafe">카페</option>
+                  <option value="night">나이트/클럽</option>
+                  <option value="show">공연/쇼</option>
+                  <option value="city">도시/랜드마크</option>
+                  <option value="shopping">쇼핑</option>
+                  <option value="hotel">호텔/리조트</option>
+                  <option value="transport">교통/렌트</option>
+                  <option value="etc">기타</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span class="label">지역</span>
+                <input class="input" id="pRegion" required placeholder="예: 다낭 / 호이안" />
+              </label>
+
+              <label class="field">
+                <span class="label">가격</span>
+                <div class="row">
+                  <input class="input" id="pPrice" type="number" min="0" step="1" placeholder="예: 30000" />
+                  <select class="select" id="pCurrency">
+                    <option value="KRW">KRW</option>
+                    <option value="VND">VND</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="field">
+                <span class="label">설명</span>
+                <textarea class="textarea" id="pDesc" rows="5" placeholder="코스/포함/주의사항 등을 적어주세요."></textarea>
+              </label>
+
+              <div class="field">
+                <span class="label">상품 이미지 (URL 최대 4개, 선택)</span>
+                <div class="img-grid">
+                  <input class="input" id="pImage1" placeholder="이미지 URL #1 (대표)" />
+                  <input class="input" id="pImage2" placeholder="이미지 URL #2" />
+                  <input class="input" id="pImage3" placeholder="이미지 URL #3" />
+                  <input class="input" id="pImage4" placeholder="이미지 URL #4" />
+                </div>
+                <div class="help">첫 번째 이미지가 대표 이미지로 사용됩니다.</div>
+              </div>
+
+              <div class="row">
+                <button class="btn" type="submit" id="btnSave">등록</button>
+                <span class="muted" id="saveMsg"></span>
+              </div>
+            </form>
+          </div>
+        </section>
+
+      </div>
+    </section>
+  </main>
+
+  <div id="siteFooter"></div>
+
+  <script type="module" src="/assets/js/pages/product_new.js"></script>
+</body>
+</html>

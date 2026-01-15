@@ -1,0 +1,55 @@
+<!-- /partials/header.html -->
+<header class="top-header" id="siteHeaderBar">
+  <div class="hdr-inner">
+
+    <!-- 브랜드 영역 -->
+    <a class="brand" href="/index.html">
+      <!-- 로고 이미지 자리 -->
+      <img
+        src="/assets/images/jovial/logo.png"
+        alt="Jovial / Photograce DB"
+        class="brand-logo"
+        onerror="this.style.display='none';"
+      />
+    </a>
+
+    <!-- 햄버거 (모바일) -->
+    <button class="burger" id="btnBurger" type="button" aria-label="menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+
+    <!-- 메뉴 -->
+    <nav class="nav" id="hdrNav">
+      <a id="navHome" href="/index.html">홈</a>
+
+      <a id="navOrders" href="/orders.html" data-role="user guide admin">내 주문</a>
+
+      <!-- guest/user -->
+      <a id="navGuide" href="/guide.html" data-role="guest user guide admin">
+        가이드 등록
+      </a>
+
+      <!-- guide/admin -->
+      <a id="navProductNew" href="/product_new.html" data-role="guide admin">
+        상품 등록
+      </a>
+      <a id="navMyProducts" href="/my_products.html" data-role="guide admin">
+        내 상품
+      </a>
+
+      <!-- admin -->
+      <a id="navAdminOrders" href="/admin_orders.html" data-role="admin">주문관리</a>
+      <a id="navAdmin" href="/admin.html" data-role="admin">관리자</a>
+    </nav>
+
+    <!-- 우측 영역 -->
+    <div class="hdr-right">
+      <span class="role-badge" id="roleBadge" style="display:none;"></span>
+
+      <button class="btn" id="btnLogin" type="button">구글 로그인</button>
+      <button class="btn" id="btnLogout" type="button" style="display:none;">
+        로그아웃
+      </button>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,164 @@
+/* /assets/css/header.css */
+
+.top-header{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(10, 16, 28, .62);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.hdr-inner{
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.brand-name{
+  color: rgba(255,255,255,.92);
+  font-weight: 800;
+  letter-spacing: .2px;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 로고 이미지 사이즈 설정: 화면 크기에 따라 자동으로 바뀜 */
+.brand-logo{
+  height: clamp(26px, 2.4vw, 36px);
+  width: auto;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.hdr-right{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.role-badge{
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.9);
+}
+
+.btn{
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.92);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.btn:hover{
+  background: rgba(255,255,255,.10);
+}
+
+/* 데스크탑 메뉴 */
+.nav{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.nav a{
+  color: rgba(255,255,255,.86);
+  text-decoration: none;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.nav a:hover{
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.10);
+}
+
+/* 햄버거 버튼 */
+.burger{
+  display: none;
+  width: 44px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+}
+
+.burger span{
+  display:block;
+  width: 18px;
+  height: 2px;
+  background: rgba(255,255,255,.92);
+  border-radius: 2px;
+}
+
+/* 모바일 레이아웃 */
+@media (max-width: 860px){
+  .hdr-inner{
+    grid-template-columns: 1fr auto auto;
+  }
+
+  .burger{
+    display: inline-flex;
+  }
+
+  /* 기본은 메뉴 숨김 */
+  .nav{
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 62px;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 16px;
+    background: rgba(10, 16, 28, .92);
+    border: 1px solid rgba(255,255,255,.10);
+  }
+
+  .nav a{
+    padding: 12px 12px;
+  }
+
+  /* 열렸을 때만 표시 */
+  #siteHeaderBar.nav-open .nav{
+    display: flex;
+  }
+
+  /* 모바일에서는 브랜드명이 길면 줄임 */
+  .brand-name{
+    font-size: 15px;
+  }
+}

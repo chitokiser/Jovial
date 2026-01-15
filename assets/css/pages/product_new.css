@@ -1,0 +1,65 @@
+/* /assets/css/pages/product_new.css */
+.grid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  align-items:start;
+}
+@media (min-width: 980px){
+  .grid{ grid-template-columns: 1.7fr 1fr; gap: 16px; }
+}
+
+.form{ display:flex; flex-direction: column; gap: 12px; }
+.lbl span{
+  display:block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.list{ display:flex; flex-direction: column; gap: 10px; }
+
+.item{
+  border: 1px solid var(--line2);
+  background: rgba(0,0,0,.18);
+  border-radius: 16px;
+  padding: 12px;
+  display:flex;
+  gap: 12px;
+  align-items:center;
+  justify-content: space-between;
+}
+.item-title{ font-size: 14px; }
+.item-sub{ color: var(--muted); font-size: 12px; margin-top: 4px; }
+.item-main{ min-width: 0; }
+
+
+/* 이미지 입력 4칸 */
+.img-grid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 720px){
+  .img-grid{ grid-template-columns: 1fr 1fr; }
+}
+.help{
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* 폼 가독성 강화 */
+.form .field{
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: rgba(255,255,255,.03);
+}
+.form .label{
+  display:block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}

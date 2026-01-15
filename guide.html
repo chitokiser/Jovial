@@ -1,0 +1,118 @@
+<!-- /guide.html -->
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>가이드 등록 | Photograce DB</title>
+
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <link rel="stylesheet" href="/assets/css/header.css" />
+  <link rel="stylesheet" href="/assets/css/footer.css" />
+  <link rel="stylesheet" href="/assets/css/pages/guide.css" />
+
+  <!-- partials loader -->
+  <script src="/assets/js/partials.js"></script>
+
+  <!-- firebase (module) -->
+  <script type="module" src="/assets/js/firebase-init.js"></script>
+  <script type="module" src="/assets/js/firestore-bridge.js"></script>
+
+  <!-- header role/menu binding -->
+  <script type="module" src="/assets/js/header-auth.js"></script>
+</head>
+
+<body>
+  <div id="siteHeader"></div>
+
+  <main class="page">
+    <section class="hero">
+      <div class="hero-inner">
+        <h1 class="hero-title">가이드 등록</h1>
+        <p class="hero-desc">
+          로그인 → 신청 → 관리자 승인 → 상품 등록 순서로 진행됩니다.
+        </p>
+      </div>
+    </section>
+
+    <!-- 게스트(미로그인) -->
+    <section class="section" id="guestSection" style="display:none;">
+      <div class="panel">
+        <div class="panel-h">
+          <h2 class="panel-title">로그인이 필요합니다</h2>
+          <p class="panel-sub">구글 로그인 후 가이드 신청을 진행할 수 있습니다.</p>
+        </div>
+        <div class="panel-body">
+          <button class="btn" id="btnLoginHere">구글 로그인</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 일반 사용자(신청 가능) -->
+    <section class="section" id="applySection" style="display:none;">
+      <div class="panel">
+        <div class="panel-h">
+          <h2 class="panel-title">가이드 신청서</h2>
+          <p class="panel-sub">승인 전까지는 상품 등록이 불가합니다.</p>
+        </div>
+
+        <form class="form" id="applyForm">
+          <label class="field">
+            <span class="label">가이드명</span>
+            <input class="input" id="fName" required placeholder="예: 김다낭" />
+          </label>
+
+          <label class="field">
+            <span class="label">연락처</span>
+            <input class="input" id="fPhone" placeholder="예: 010-1234-5678" />
+          </label>
+
+          <label class="field">
+            <span class="label">활동 지역</span>
+            <input class="input" id="fRegion" required placeholder="예: 다낭 / 호이안" />
+          </label>
+
+          <label class="field">
+            <span class="label">경력(간단)</span>
+            <input class="input" id="fExp" placeholder="예: 현지 가이드 3년" />
+          </label>
+
+          <label class="field">
+            <span class="label">소개</span>
+            <textarea class="textarea" id="fBio" rows="4" placeholder="어떤 여행을 안내하시나요?"></textarea>
+          </label>
+
+          <div class="row">
+            <button class="btn" type="submit" id="btnSubmit">신청 제출</button>
+            <span class="muted" id="applyState"></span>
+          </div>
+        </form>
+
+        <div class="note" id="pendingBox" style="display:none;">
+          신청이 접수되었습니다. 관리자 승인을 기다려 주세요.
+        </div>
+      </div>
+    </section>
+
+    <!-- 가이드/관리자(승인됨) -->
+    <section class="section" id="approvedSection" style="display:none;">
+      <div class="panel">
+        <div class="panel-h">
+          <h2 class="panel-title">승인 완료</h2>
+          <p class="panel-sub">이제 상품 등록/내 상품 관리가 가능합니다.</p>
+        </div>
+        <div class="panel-body">
+          <div class="row">
+            <a class="btn" href="./product_new.html">상품 등록</a>
+            <a class="btn" href="./my_products.html">내 상품</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="siteFooter"></div>
+
+  <script type="module" src="/assets/js/pages/guide.js"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+// /firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // orders 단건에서만 쓰는 구매자 판정
+    function isOrderBuyer() {
+      return signedIn()
+        && (resource.data.buyerUid is string)
+        && resource.data.buyerUid == request.auth.uid;
+    }
+
+    // 구매자가 수정 가능한 키를 "결제증빙 전용"으로 제한
+    function buyerPayProofUpdateOnly() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(["proof","paymentStatus","payProofUpdatedAt"]);
+    }
+
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 가이드 신청서
+    match /guideApplications/{uid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
+      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if isAdmin();
+    }
+
+    // 가이드 프로필
+    match /guides/{uid} {
+      allow get: if isAdmin()
+                || (signedIn() && request.auth.uid == uid)
+                || (resource.data.approved == true);
+      allow list: if isAdmin();
+
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if false;
+    }
+
+    // 상품(items)
+    // 목표
+    // - 공개 상품(status: published/approved): 누구나 읽기 가능
+    // - 비공개(draft/pending/rejected): admin 또는 소유자만 읽기/수정
+    match /items/{itemId} {
+
+      function isOwner() {
+        return signedIn() && (
+          (resource.data.ownerUid is string && resource.data.ownerUid == request.auth.uid)
+          || (resource.data.guideUid is string && resource.data.guideUid == request.auth.uid)
+        );
+      }
+
+      function isPublicItem() {
+        return (resource.data.status in ["published", "approved"]);
+      }
+
+      // 단건 조회(get): 공개는 누구나, admin/소유자는 항상
+      allow get: if isAdmin() || isOwner() || isPublicItem();
+
+      // 목록(list/query): 우선 공개 읽기 요구 때문에 전체 허용(개발 편의)
+      // 운영 단계에서는 request.query.where("status","==","published") 강제 등으로 재조정 권장
+      allow list: if true;
+
+      allow create: if signedIn()
+        && (request.resource.data.ownerUid is string)
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow update: if isAdmin() || isOwner();
+
+      allow delete: if isAdmin()
+        || (signedIn() && (resource.data.ownerUid is string) && resource.data.ownerUid == request.auth.uid);
+
+      // 리뷰(subcollection)
+      match /reviews/{uid} {
+        // 공개 상품의 리뷰는 누구나 읽기 가능
+        allow get, list: if isAdmin() || isPublicItem() || isOwner();
+
+        // 작성/수정: 본인만
+        allow create, update: if signedIn() && request.auth.uid == uid;
+
+        // 삭제: admin만
+        allow delete: if isAdmin();
+      }
+    }
+
+    // 주문(orders)
+    // - get: admin 또는 buyerUid 본인
+    // - list(query): 반드시 buyerUid==내 uid 조건이 포함된 쿼리만 허용 (admin 예외)
+    // - create: buyerUid는 본인으로 강제
+    // - update: 구매자는 결제증빙 3필드만
+    match /orders/{orderId} {
+      allow get: if isAdmin() || isOrderBuyer();
+
+      allow list: if isAdmin()
+        || (signedIn() && request.query.where("buyerUid", "==", request.auth.uid));
+
+      allow create: if signedIn()
+        && (request.resource.data.buyerUid is string)
+        && request.resource.data.buyerUid == request.auth.uid;
+
+      allow update: if isAdmin()
+        || (isOrderBuyer() && buyerPayProofUpdateOnly());
+
+      allow delete: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow get, create, update: if signedIn() && request.auth.uid == uid;
+      allow list, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
