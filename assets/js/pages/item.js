@@ -9,9 +9,11 @@ import {
   getDoc,
   collection,
   query,
+  where,
+  orderBy,
+  limit,
   getDocs,
   serverTimestamp,
-  setDoc,
   addDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -29,6 +31,49 @@ function esc(s) {
 function safeText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text ?? "";
+}
+
+function setRatingInline(id, avg, count){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const a = Number(avg) || 0;
+  const c = Number(count) || 0;
+  const pct = Math.max(0, Math.min(100, (a / 5) * 100));
+  const avgText = (Math.round(a * 10) / 10).toFixed(1);
+  el.innerHTML = `
+    <span class="rating-inline">
+      <span class="rating-num">${esc(avgText)}</span>
+      <span class="starbar" style="--pct:${pct.toFixed(0)}%"></span>
+      <span class="rating-count">(${esc(c)})</span>
+    </span>
+  `;
+}
+
+
+const CART_KEY = "jovial_cart_v1";
+
+function loadCart(){
+  try{
+    const raw = localStorage.getItem(CART_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){
+    return [];
+  }
+}
+
+function saveCart(arr){
+  localStorage.setItem(CART_KEY, JSON.stringify(arr || []));
+}
+
+function addToCart(item){
+  const cart = loadCart();
+  const exists = cart.some(x => x && x.itemId === item.itemId);
+  if (!exists){
+    cart.push(item);
+    saveCart(cart);
+  }
+  return { count: cart.length, existed: exists };
 }
 
 function setState(t) {
@@ -160,6 +205,16 @@ function tsSeconds(v) {
   return 0;
 }
 
+function toMs(v) {
+  if (!v) return 0;
+  if (typeof v === 'object' && typeof v.seconds === 'number') return v.seconds * 1000;
+  if (typeof v === 'object' && typeof v.toDate === 'function') return v.toDate().getTime();
+  if (typeof v === 'number') return v;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : 0;
+}
+
+
 function fmtDate(ts) {
   const s = tsSeconds(ts);
   if (!s) return "";
@@ -173,19 +228,30 @@ function starText(n) {
 }
 
 async function loadReviews(itemId) {
-  const q = query(collection(db, "items", itemId, "reviews"));
-  const snap = await getDocs(q);
+  // SSOT: top-level reviews/{orderId}
+  // NOTE: where+orderBy 조합은 복합 인덱스가 필요할 수 있어, where만 사용하고 클라이언트에서 정렬합니다.
+  const q = query(
+    collection(db, "reviews"),
+    where("itemId", "==", itemId),
+    limit(300)
+  );
 
+  const snap = await getDocs(q);
   const out = [];
   snap.forEach((d) => out.push({ _id: d.id, ...d.data() }));
 
-  out.sort((a, b) => {
-    const at = tsSeconds(a.createdAt) || tsSeconds(a.updatedAt);
-    const bt = tsSeconds(b.createdAt) || tsSeconds(b.updatedAt);
-    return bt - at;
-  });
+  // visible=false(숨김) 은 사용자 화면에서 제외
+  const visible = out.filter((r) => r.visible !== false);
 
-  return out;
+  // createdAt 내림차순 정렬
+  const toSec = (v) => {
+    if (!v) return 0;
+    if (typeof v === "object" && typeof v.seconds === "number") return v.seconds;
+    return 0;
+  };
+  visible.sort((a, b) => toSec(b.createdAt) - toSec(a.createdAt));
+
+  return visible.slice(0, 30);
 }
 
 function renderReviews(list) {
@@ -194,17 +260,17 @@ function renderReviews(list) {
 
   if (!list.length) {
     wrap.innerHTML = `<div class="empty">아직 리뷰가 없습니다.</div>`;
-    safeText("rvAvg", "평균 - / 0건");
+    setRatingInline("rvAvg", 0, 0);
     return;
   }
 
   const sum = list.reduce((a, r) => a + (Number(r.rating) || 0), 0);
   const avg = Math.round((sum / list.length) * 10) / 10;
 
-  safeText("rvAvg", `평균 ${avg} / ${list.length}건`);
+  setRatingInline("rvAvg", avg, list.length);
 
   wrap.innerHTML = list.map((r) => {
-    const name = r.displayName || "익명";
+    const name = r.authorName || r.displayName || "익명";
     const rating = Number(r.rating) || 0;
     const date = fmtDate(r.updatedAt || r.createdAt);
     const text = r.text || "";
@@ -223,24 +289,7 @@ function renderReviews(list) {
   }).join("");
 }
 
-async function saveMyReview({ itemId, user, rating, text }) {
-  const ref = doc(db, "items", itemId, "reviews", user.uid);
-
-  const payload = {
-    uid: user.uid,
-    displayName: user.displayName || user.email || "user",
-    rating: Number(rating) || 5,
-    text: String(text || "").trim(),
-    updatedAt: serverTimestamp(),
-  };
-
-  await setDoc(ref, payload, { merge: true });
-
-  const snap = await getDoc(ref);
-  if (snap.exists() && !snap.data().createdAt) {
-    await setDoc(ref, { createdAt: serverTimestamp() }, { merge: true });
-  }
-}
+// 리뷰 작성은 주문 기반(review.html)으로만 진행
 
 /* 주문 저장 */
 function setOrderState(t) {
@@ -272,21 +321,40 @@ async function createOrder({ itemId, itemTitle, ownerUid, price, user }) {
   if (!Number.isFinite(people) || people < 1) throw new Error("인원은 1 이상이어야 합니다.");
   if (contact.length < 3) throw new Error("구매자 연락처를 입력하세요.");
 
+  const now = new Date();
+  const settlementMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   const payload = {
     itemId,
     itemTitle: String(itemTitle || ""),
-    ownerUid,
-    price: Number.isFinite(price) ? price : 0,
 
+    // guide
+    ownerUid,               // legacy
+    guideUid: ownerUid || "", // SSOT
+
+    // buyer
     buyerUid: user.uid,
     buyerName: user.displayName || user.email || "buyer",
+    buyerEmail: user.email || "",
+
+    // booking info
     contact,
     date,
     people,
-    payment,   // card | fiat | hex
+    payment, // card | fiat | hex | offline
     memo,
 
-    status: "pending",
+    // amount
+    amount: Number.isFinite(price) ? price : 0,
+    price: Number.isFinite(price) ? price : 0,
+    currency: "KRW",
+
+    // settlement flow
+    status: "paid",          // 구매자 구매완료(=결제확인 대기)
+    paymentStatus: "paid",   // offline paid (관리자 확인용)
+    settlementMonth,
+    paidAt: serverTimestamp(),
+
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -390,56 +458,42 @@ async function main({ user, profile }) {
 
     const itemInfo = renderItem({ id, data, viewerUid, viewerIsAdmin });
 
+    // 장바구니 담기
+    const btnAddCart = $("btnAddCart");
+    if (btnAddCart) {
+      btnAddCart.addEventListener("click", () => {
+        try {
+          const cartItem = {
+            itemId: id,
+            title: itemInfo?.title || data.title || data.name || "",
+            price: itemInfo?.price ?? data.price ?? data.amount ?? "",
+            thumb: itemInfo?.thumb || (Array.isArray(data.images) ? (data.images[0]?.url || data.images[0]) : ""),
+            region: itemInfo?.region || data.region || data.area || "",
+            category: itemInfo?.category || data.category || data.cat || "",
+          };
+          const r = addToCart(cartItem);
+          alert(r.existed ? "이미 장바구니에 담겨 있습니다." : `장바구니에 담았습니다. (총 ${r.count}개)`);
+        } catch (e) {
+          console.error(e);
+          alert(e?.message || String(e));
+        }
+      });
+    }
+
+
     setState("");
     showBox(true);
 
     const reviews = await loadReviews(id);
     renderReviews(reviews);
 
-    // 리뷰 작성
+    // 리뷰 작성(주문 기반) 안내
     const form = $("#rvFormWrap");
     const hint = $("#rvHint");
-
-    if (!user) {
-      if (form) form.style.display = "none";
-      if (hint) {
-        hint.style.display = "block";
-        hint.textContent = "리뷰 작성은 로그인 후 가능합니다.";
-      }
-    } else if (itemInfo.ownerUid === user.uid) {
-      if (form) form.style.display = "none";
-      if (hint) {
-        hint.style.display = "block";
-        hint.textContent = "본인 상품에는 리뷰를 작성할 수 없습니다.";
-      }
-    } else if (!["published","approved"].includes(itemInfo.status)) {
-      if (form) form.style.display = "none";
-      if (hint) {
-        hint.style.display = "block";
-        hint.textContent = "공개(published)된 상품만 리뷰 작성이 가능합니다.";
-      }
-    } else {
-      if (hint) hint.style.display = "none";
-      if (form) form.style.display = "block";
-
-      $("#btnRvSave")?.addEventListener("click", async () => {
-        const rating = $("#rvRating")?.value || "5";
-        const text = $("#rvText")?.value || "";
-
-        try {
-          $("#btnRvSave").disabled = true;
-          await saveMyReview({ itemId: id, user, rating, text });
-
-          const list = await loadReviews(id);
-          renderReviews(list);
-          alert("리뷰 저장 완료");
-        } catch (e) {
-          console.error(e);
-          alert(e?.message || String(e));
-        } finally {
-          $("#btnRvSave").disabled = false;
-        }
-      });
+    if (form) form.style.display = "none";
+    if (hint) {
+      hint.style.display = "block";
+      hint.textContent = "리뷰 작성은 주문 완료 후 '내 주문'에서 진행됩니다.";
     }
 
     // 예약/구매

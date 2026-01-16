@@ -140,22 +140,34 @@ export function toItemViewModel(docId, data) {
     status: d.status || "",
     images,
     thumb: pickFirstUrl(images),
-    ratingAvg: d.ratingAvg ?? d.avgRating ?? "",
+    ratingAvg: d.ratingAvg ?? d.reviewAvg ?? d.avgRating ?? "",
     ratingCount: d.ratingCount ?? d.reviewCount ?? "",
   };
+}
+
+export function renderRatingInline(avg, count) {
+  const a = Number(avg) || 0;
+  const c = Number(count) || 0;
+  const pct = Math.max(0, Math.min(100, (a / 5) * 100));
+  const avgText = (Math.round(a * 10) / 10).toFixed(1);
+  const countText = `(${c})`;
+  return `
+    <span class="rating-inline">
+      <span class="rating-num">${esc(avgText)}</span>
+      <span class="starbar" style="--pct:${pct.toFixed(0)}%"></span>
+      <span class="rating-count">${esc(countText)}</span>
+    </span>
+  `;
 }
 
 export function renderItemCard(item) {
   const url = item.thumb || "";
   const thumb = renderThumb(url, item.title);
 
-  const rating =
-    (item.ratingAvg || item.ratingCount)
-      ? `<div class="card-rating">⭐ ${esc(item.ratingAvg || "0")} / ${esc(item.ratingCount || "0")}</div>`
-      : `<div class="card-rating card-rating--muted">⭐ 0 / 0</div>`;
-
   const price = item.price ? String(item.price) : "";
-  const priceBadge = price ? `<span class="badge">가격: ${esc(price)}</span>` : "";
+  const priceText = price ? `<span class="card-price">${esc(price)}</span>` : `<span class="card-price muted">가격 -</span>`;
+
+  const rating = renderRatingInline(item.ratingAvg || 0, item.ratingCount || 0);
 
   return `
     <div class="card">
@@ -163,11 +175,14 @@ export function renderItemCard(item) {
         ${thumb}
         <div class="card-body">
           <div class="card-title">${esc(item.title || "(상품)")}</div>
-          ${rating}
+          <div class="card-subline">
+            ${priceText}
+            <span class="dot">·</span>
+            ${rating}
+          </div>
           <div class="card-meta">
             <span class="badge">${esc(catLabel(item.category))}</span>
             ${item.region ? `<span class="badge">${esc(item.region)}</span>` : ""}
-            ${priceBadge}
           </div>
           <div class="card-actions">
             <span class="btn btn-sm">상세</span>

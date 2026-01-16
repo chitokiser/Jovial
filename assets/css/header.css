@@ -64,6 +64,21 @@
   color: rgba(255,255,255,.9);
 }
 
+.user-badge{
+  display:inline-flex;
+  align-items:center;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.84);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .btn{
   padding: 10px 12px;
   border-radius: 12px;
@@ -112,6 +127,16 @@
   justify-content: center;
   gap: 5px;
   padding: 0;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.burger:hover{
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.16);
+}
+
+.burger:active{
+  transform: translateY(1px);
 }
 
 .burger span{
@@ -120,6 +145,21 @@
   height: 2px;
   background: rgba(255,255,255,.92);
   border-radius: 2px;
+  transition: transform .18s ease, opacity .18s ease, width .18s ease;
+  box-shadow: 0 0 18px rgba(255,255,255,.06);
+}
+
+/* open -> X */
+#siteHeaderBar.nav-open .burger span:nth-child(1){
+  transform: translateY(7px) rotate(45deg);
+  width: 20px;
+}
+#siteHeaderBar.nav-open .burger span:nth-child(2){
+  opacity: 0;
+}
+#siteHeaderBar.nav-open .burger span:nth-child(3){
+  transform: translateY(-7px) rotate(-45deg);
+  width: 20px;
 }
 
 /* 모바일 레이아웃 */
@@ -160,5 +200,9 @@
   /* 모바일에서는 브랜드명이 길면 줄임 */
   .brand-name{
     font-size: 15px;
+  }
+
+  .user-badge{
+    max-width: 170px;
   }
 }

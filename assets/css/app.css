@@ -81,6 +81,46 @@ a{ color:inherit; }
 }
 .btn.danger:hover{ background: rgba(255,77,109,.18); }
 
+/* rating UI (5 stars always visible, fill by --pct) */
+.rating-inline{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.1;
+}
+.rating-inline .rating-num{
+  font-weight: 800;
+  letter-spacing: .1px;
+}
+.rating-inline .rating-count{
+  color: var(--muted);
+}
+.starbar{
+  position: relative;
+  display: inline-block;
+  font-size: 13px;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+.starbar::before{
+  content: "★★★★★";
+  color: rgba(255,255,255,.25);
+}
+.starbar::after{
+  content: "★★★★★";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--pct, 0%);
+  overflow: hidden;
+  color: var(--warn);
+}
+
+.muted{
+  color: var(--muted);
+}
+
 .hide{ display:none !important; }
 
 .state{

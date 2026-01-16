@@ -20,6 +20,12 @@
       <div class="panel-h">
         <div class="panel-title">관리자 주문내역</div>
         <div class="panel-actions">
+          <select class="input" id="selStatus" style="min-width:160px">
+            <option value="all">전체</option>
+            <option value="paid">결제확인 대기</option>
+            <option value="confirmed">결제확인 완료</option>
+            <option value="settled">정산 완료</option>
+          </select>
           <button class="btn" id="btnReload" type="button">새로고침</button>
         </div>
       </div>

@@ -6,7 +6,7 @@
     <a class="brand" href="/index.html">
       <!-- 로고 이미지 자리 -->
       <img
-        src="/assets/images/jovial/logo.png"
+        src="/assets/images/jovial/logo2.png"
         alt="Jovial / Photograce DB"
         class="brand-logo"
         onerror="this.style.display='none';"
@@ -37,7 +37,13 @@
         내 상품
       </a>
 
+
+      <a id="navGuideSettlement" href="/guide_settlement.html" data-role="guide admin">
+        정산
+      </a>
+
       <!-- admin -->
+      <a id="navAdminSettlement" href="/admin_settlement.html" data-role="admin">정산(관리자)</a>
       <a id="navAdminOrders" href="/admin_orders.html" data-role="admin">주문관리</a>
       <a id="navAdmin" href="/admin.html" data-role="admin">관리자</a>
     </nav>
@@ -45,6 +51,7 @@
     <!-- 우측 영역 -->
     <div class="hdr-right">
       <span class="role-badge" id="roleBadge" style="display:none;"></span>
+      <span class="user-badge" id="userBadge" style="display:none;" title=""></span>
 
       <button class="btn" id="btnLogin" type="button">구글 로그인</button>
       <button class="btn" id="btnLogout" type="button" style="display:none;">

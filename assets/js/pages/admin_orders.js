@@ -1,7 +1,12 @@
 // /assets/js/pages/admin_orders.js
+// 관리자 주문관리
+// 흐름
+// - 구매자 checkout: orders.status = "paid"
+// - 관리자 결제확인: orders.status = "confirmed" + guideOrders 미러 생성
+// - 월정산 락: orders.status = "settled" (admin_settlement.js)
+
 import { onAuthReady } from "../auth.js";
 import { auth, db } from "/assets/js/firebase-init.js";
-
 import { isAdmin } from "../roles.js";
 
 import {
@@ -10,6 +15,11 @@ import {
   orderBy,
   limit,
   getDocs,
+  doc,
+  getDoc,
+  setDoc,
+  writeBatch,
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const $ = (s) => document.querySelector(s);
@@ -23,25 +33,59 @@ function esc(s) {
     .replaceAll("'", "&#039;");
 }
 
-function tsSeconds(v) {
+function toMs(v) {
   if (!v) return 0;
-  if (typeof v === "object" && typeof v.seconds === "number") return v.seconds;
-  return 0;
+  if (typeof v === "object" && typeof v.seconds === "number") return v.seconds * 1000;
+  if (typeof v === "object" && typeof v.toDate === "function") return v.toDate().getTime();
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : 0;
 }
 
 function fmtDT(ts) {
-  const s = tsSeconds(ts);
-  if (!s) return "";
-  const d = new Date(s * 1000);
+  const ms = toMs(ts);
+  if (!ms) return "";
+  const d = new Date(ms);
   return d.toISOString().replace("T", " ").slice(0, 16);
 }
 
-function rowHTML(o) {
+function statusLabel(s) {
+  const v = String(s || "").toLowerCase();
+  if (v === "paid" || v === "pending") return "결제확인 대기";
+  if (v === "confirmed") return "결제확인 완료";
+  if (v === "settled") return "정산 완료";
+  return v || "-";
+}
+
+function paymentLabel(o) {
+  const p = String(o.payment || "offline");
+  if (p === "offline") return "오프라인";
+  return p;
+}
+
+function normalizeOrder(raw) {
+  const o = { ...(raw || {}) };
+  // legacy: ownerUid -> guideUid
+  if (!o.guideUid && o.ownerUid) o.guideUid = o.ownerUid;
+  return o;
+}
+
+function rowHTML(orderId, o) {
   const created = fmtDT(o.createdAt);
-  const status = o.status || "-";
-  const pay = o.payment || "-";
+  const paidAt = fmtDT(o.paidAt);
+  const confirmedAt = fmtDT(o.confirmedAt);
+
+  const status = statusLabel(o.status);
+  const pay = paymentLabel(o);
   const title = o.itemTitle || "(상품)";
-  const date = o.date || "-";
+  const amount = (o.amount != null && o.amount !== "") ? String(o.amount) : "";
+  const buyer = o.buyerName || o.buyerEmail || o.buyerUid || "";
+  const guideUid = o.guideUid || o.ownerUid || "";
+  const ym = o.settlementMonth || "";
+
+  const canConfirm = ["paid","pending"].includes(String(o.status || "").toLowerCase());
+  const confirmBtn = canConfirm
+    ? `<button class="btn btn--sm btn--primary" data-act="confirm" data-id="${esc(orderId)}">결제확인</button>`
+    : "";
 
   return `
     <div class="row">
@@ -54,23 +98,79 @@ function rowHTML(o) {
         </div>
       </div>
 
-      <div class="kv"><div class="k">예약일</div><div class="v">${esc(date)}</div></div>
-      <div class="kv"><div class="k">인원</div><div class="v">${esc(o.people)}</div></div>
-      <div class="kv"><div class="k">가이드(ownerUid)</div><div class="v">${esc(o.ownerUid || "")}</div></div>
-      <div class="kv"><div class="k">구매자</div><div class="v">${esc(o.buyerName || o.buyerUid || "")}</div></div>
-      <div class="kv"><div class="k">연락처</div><div class="v">${esc(o.contact || "")}</div></div>
-      <div class="kv"><div class="k">메모</div><div class="v">${esc(o.memo || "")}</div></div>
+      <div class="kv"><div class="k">주문ID</div><div class="v">${esc(orderId)}</div></div>
+      <div class="kv"><div class="k">가이드</div><div class="v">${esc(guideUid)}</div></div>
+      <div class="kv"><div class="k">구매자</div><div class="v">${esc(buyer)}</div></div>
+      <div class="kv"><div class="k">금액</div><div class="v">${esc(amount)}</div></div>
+      <div class="kv"><div class="k">정산월</div><div class="v">${esc(ym)}</div></div>
+      <div class="kv"><div class="k">결제시각</div><div class="v">${esc(paidAt || "-")}</div></div>
+      <div class="kv"><div class="k">확인시각</div><div class="v">${esc(confirmedAt || "-")}</div></div>
 
       <div class="actions">
-        <a class="linkbtn" href="/item.html?id=${encodeURIComponent(o.itemId)}" target="_blank" rel="noopener">상품 보기</a>
+        <a class="linkbtn" href="/item.html?id=${encodeURIComponent(o.itemId || "")}" target="_blank" rel="noopener">상품 보기</a>
+        ${confirmBtn}
       </div>
     </div>
   `;
 }
 
+function monthFromNow() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+async function confirmPaidOrder(orderId) {
+  const ref = doc(db, "orders", orderId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("주문을 찾을 수 없습니다.");
+
+  const o0 = normalizeOrder(snap.data() || {});
+  const st = String(o0.status || "").toLowerCase();
+  if (st !== "paid" && st !== "pending") throw new Error("결제확인 대기 상태만 처리할 수 있습니다.(paid/pending)");
+
+  const guideUid = String(o0.guideUid || "").trim();
+  if (!guideUid) throw new Error("guideUid가 없습니다. (상품 ownerUid/guideUid 확인 필요)");
+
+  const settlementMonth = String(o0.settlementMonth || "").trim() || monthFromNow();
+
+  const batch = writeBatch(db);
+
+  // 1) orders 업데이트
+  batch.update(ref, {
+    status: "confirmed",
+    guideUid,
+    settlementMonth,
+    confirmedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // 2) guideOrders 미러 생성/갱신
+  const gref = doc(db, "guideOrders", guideUid, "orders", orderId);
+  batch.set(gref, {
+    orderId,
+    guideUid,
+    buyerUid: o0.buyerUid || "",
+    itemId: o0.itemId || "",
+    itemTitle: o0.itemTitle || "",
+    itemThumb: o0.itemThumb || "",
+    amount: o0.amount ?? "",
+    currency: o0.currency || "",
+    status: "confirmed",
+    settlementMonth,
+    createdAt: o0.createdAt || serverTimestamp(),
+    paidAt: o0.paidAt || null,
+    confirmedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  await batch.commit();
+}
+
 async function loadAdminOrders() {
   const state = $("#ordersState");
   const list = $("#ordersList");
+  const sel = $("#selStatus");
+  const filter = String(sel?.value || "all").toLowerCase();
 
   state.textContent = "불러오는 중...";
   list.innerHTML = "";
@@ -78,21 +178,45 @@ async function loadAdminOrders() {
   const q = query(
     collection(db, "orders"),
     orderBy("createdAt", "desc"),
-    limit(300)
+    limit(400)
   );
 
   const snap = await getDocs(q);
   const arr = [];
-  snap.forEach((d) => arr.push({ _id: d.id, ...d.data() }));
+  snap.forEach((d) => arr.push({ _id: d.id, ...normalizeOrder(d.data()) }));
+
+  const rows = arr.filter((o) => {
+    if (filter === "all") return true;
+    return String(o.status || "").toLowerCase() === filter;
+  });
 
   state.textContent = "";
 
-  if (!arr.length) {
+  if (!rows.length) {
     list.innerHTML = `<div class="empty">주문이 없습니다.</div>`;
     return;
   }
 
-  list.innerHTML = arr.map(rowHTML).join("");
+  list.innerHTML = rows.map((o) => rowHTML(o._id, o)).join("");
+
+  // action binds
+  list.querySelectorAll("button[data-act='confirm']").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-id");
+      if (!id) return;
+      if (!confirm("이 주문을 '결제확인 완료'로 처리할까요?\n처리 후 가이드 주문관리/정산대상에 즉시 반영됩니다.")) return;
+
+      btn.disabled = true;
+      try {
+        await confirmPaidOrder(id);
+        await loadAdminOrders();
+      } catch (e) {
+        console.error(e);
+        alert(e?.message || String(e));
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 onAuthReady(async ({ user, profile }) => {
@@ -106,5 +230,6 @@ onAuthReady(async ({ user, profile }) => {
   }
 
   $("#btnReload")?.addEventListener("click", loadAdminOrders);
+  $("#selStatus")?.addEventListener("change", loadAdminOrders);
   await loadAdminOrders();
 });

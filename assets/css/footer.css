@@ -45,3 +45,56 @@
   font-size: 12px;
   color: var(--muted);
 }
+.site-footer{
+  margin-top:60px;
+  background:#0b1220;
+  color:#fff;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+
+.ftr-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:40px 20px;
+  display:grid;
+  grid-template-columns:1.4fr 1fr 1fr 1fr;
+  gap:24px;
+}
+
+.ftr-logo{
+  width:42px;
+  height:42px;
+  object-fit:contain;
+}
+
+.ftr-brand{
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+.ftr-brand-text span{
+  display:block;
+  font-size:12px;
+  opacity:.7;
+}
+
+.ftr-title{
+  font-weight:600;
+  margin-bottom:10px;
+}
+
+.ftr-col a{
+  display:block;
+  font-size:13px;
+  opacity:.8;
+  margin-bottom:6px;
+}
+.ftr-col a:hover{opacity:1;}
+
+.ftr-bottom{
+  padding:14px;
+  text-align:center;
+  font-size:12px;
+  opacity:.6;
+}

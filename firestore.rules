@@ -19,6 +19,12 @@ service cloud.firestore {
         && resource.data.buyerUid == request.auth.uid;
     }
 
+    function isOrderGuide() {
+      return signedIn()
+        && (resource.data.guideUid is string)
+        && resource.data.guideUid == request.auth.uid;
+    }
+
     // 구매자가 수정 가능한 키를 "결제증빙 전용"으로 제한
     function buyerPayProofUpdateOnly() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
@@ -97,16 +103,80 @@ service cloud.firestore {
       }
     }
 
+    // 리뷰 (SSOT)
+    // reviews/{orderId}
+    // - 작성/수정: 주문의 buyerUid(=authorUid) 본인만
+    // - 읽기: 누구나(상품 상세/랭킹 표시용)
+    // - 가이드/관리자 답변: 각자 필드 제한
+    match /reviews/{orderId} {
+
+      function orderExistsAndMine() {
+        return signedIn()
+          && exists(/databases/$(database)/documents/orders/$(orderId))
+          && get(/databases/$(database)/documents/orders/$(orderId)).data.buyerUid == request.auth.uid;
+      }
+
+      function isReviewAuthor() {
+        return signedIn()
+          && (resource.data.authorUid is string)
+          && resource.data.authorUid == request.auth.uid;
+      }
+
+      function isReviewGuide() {
+        return signedIn()
+          && (resource.data.guideUid is string)
+          && resource.data.guideUid == request.auth.uid;
+      }
+
+      function authorUpdateOnly() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return changed.hasOnly(["rating","text","updatedAt"]);
+      }
+
+      function guideReplyOnly() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return changed.hasOnly(["guideReply","updatedAt"]);
+      }
+
+      function adminReplyOnly() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return changed.hasOnly(["adminReply","visible","updatedAt"]);
+      }
+
+      // 공개 읽기(게스트 포함)
+      allow get, list: if true;
+
+      // 생성: 주문 존재 + 구매자 본인 + authorUid 일치
+      allow create: if orderExistsAndMine()
+        && (request.resource.data.authorUid is string)
+        && request.resource.data.authorUid == request.auth.uid
+        && (request.resource.data.orderId == orderId);
+
+      // 수정:
+      // - admin: 전체
+      // - author: rating/text
+      // - guide: guideReply
+      // - admin(비admin): adminReply/visible
+      allow update: if isAdmin()
+        || (isReviewAuthor() && authorUpdateOnly())
+        || (isReviewGuide() && guideReplyOnly())
+        || (signedIn() && isAdmin() == false && false); // 안전장치(기본 deny)
+
+      // adminReplyOnly는 admin만 처리(위 isAdmin)
+      allow delete: if isAdmin();
+    }
+
     // 주문(orders)
     // - get: admin 또는 buyerUid 본인
     // - list(query): 반드시 buyerUid==내 uid 조건이 포함된 쿼리만 허용 (admin 예외)
     // - create: buyerUid는 본인으로 강제
     // - update: 구매자는 결제증빙 3필드만
     match /orders/{orderId} {
-      allow get: if isAdmin() || isOrderBuyer();
+      allow get: if isAdmin() || isOrderBuyer() || isOrderGuide();
 
       allow list: if isAdmin()
-        || (signedIn() && request.query.where("buyerUid", "==", request.auth.uid));
+        || (signedIn() && request.query.where("buyerUid", "==", request.auth.uid))
+        || (signedIn() && request.query.where("guideUid", "==", request.auth.uid));
 
       allow create: if signedIn()
         && (request.resource.data.buyerUid is string)
@@ -121,6 +191,56 @@ service cloud.firestore {
     match /users/{uid} {
       allow get, create, update: if signedIn() && request.auth.uid == uid;
       allow list, delete: if isAdmin();
+    }
+
+    // 정산 스냅샷 (락/지급 상태)
+    // settlements/{yyyy-mm}
+    // - admin: 전체 읽기/쓰기
+    // - guide: 가이드 정산 화면에서 locked/commissionPct 를 읽어야 하므로 "get"은 로그인 사용자에게 허용
+    //          (list는 admin만 유지)
+    match /settlements/{ym} {
+      allow get: if isAdmin() || signedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /guides/{uid} {
+        allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+        allow list: if isAdmin();
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // (레거시) settlementRuns는 기존 데이터 호환을 위해 그대로 유지
+    match /settlementRuns/{ym} {
+      allow get: if isAdmin() || signedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /guides/{uid} {
+        allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+        allow list: if isAdmin();
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // 가이드 주문 미러 (관리자 결제확인 후 생성)
+    // guideOrders/{guideUid}/orders/{orderId}
+    match /guideOrders/{guideUid} {
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == guideUid);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /orders/{orderId} {
+        allow get, list: if isAdmin() || (signedIn() && request.auth.uid == guideUid);
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // 설정 문서 (예: 커미션 기본값)
+    match /settings/{docId} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /{document=**} {

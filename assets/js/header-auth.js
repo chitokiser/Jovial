@@ -38,6 +38,21 @@ function applyRoleToMenu(role){
   });
 }
 
+function applyUserBadge(profile){
+  const el = document.getElementById("userBadge");
+  if(!el) return;
+  if(!profile){
+    el.textContent = "";
+    el.title = "";
+    show(el, false);
+    return;
+  }
+  const id = profile.email || profile.displayName || profile.uid || "";
+  el.textContent = id;
+  el.title = `uid: ${profile.uid}${profile.email ? `\nemail: ${profile.email}` : ""}`;
+  show(el, true);
+}
+
 function initHamburger(){
   if(window.__pg_burger_bound) return;
 
@@ -124,10 +139,11 @@ async function bindHeader(){
   show(btnLogin, true);
   show(btnLogout, false);
 
-  watchAuth(({ loggedIn, role })=>{
+  watchAuth(({ loggedIn, role, profile })=>{
     show(btnLogin, !loggedIn);
     show(btnLogout, loggedIn);
     applyRoleToMenu(role || (loggedIn ? "user" : "guest"));
+    applyUserBadge(loggedIn ? profile : null);
   });
 }
 

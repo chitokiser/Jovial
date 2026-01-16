@@ -1,6 +1,9 @@
 // /assets/js/pages/orders.js
+// NOTE: Firestore 복합 인덱스 없이 동작하도록 where + orderBy 조합을 제거했습니다.
+//       정렬은 클라이언트에서 createdAt 기준으로 처리합니다.
+
 import { onAuthReady } from "../auth.js";
-import { db } from "/assets/js/firebase-init.js";
+import { auth, db } from "../firebase-init.js";
 
 import {
   collection,
@@ -8,9 +11,21 @@ import {
   where,
   limit,
   getDocs,
+  getDoc,
+  doc,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const $ = (id) => document.getElementById(id);
+
+const tabOrders = $("tabOrders");
+const tabReviews = $("tabReviews");
+const viewOrders = $("viewOrders");
+const viewReviews = $("viewReviews");
+const btnReload = $("btnReload");
+
+const stateEl = $("state");
+const ordersList = $("ordersList");
+const myReviewsList = $("myReviewsList");
 
 function esc(s) {
   return String(s ?? "")
@@ -21,84 +36,289 @@ function esc(s) {
     .replaceAll("'", "&#039;");
 }
 
-function setMsg(t) {
-  const el = $("msg");
-  if (el) el.textContent = String(t || "");
+function setState(msg, kind = "") {
+  if (!stateEl) return;
+  stateEl.className = "state " + (kind ? `state--${kind}` : "");
+  stateEl.textContent = msg || "";
 }
 
-function renderList(rows) {
-  const box = $("orderList");
-  if (!box) return;
-
-  if (!rows.length) {
-    box.innerHTML = `<div class="empty">주문 내역이 없습니다.</div>`;
-    return;
-  }
-
-  box.innerHTML = rows.map((o) => {
-    const id = o._id;
-    const title = esc(o.itemTitle || "(상품)");
-    const status = esc(o.status || "pending");
-    const payment = esc(o.payment || o.payMethod || "card");
-    const amount = esc(o.price ?? o.amount ?? "");
-    const date = esc(o.date || "");
-    return `
-      <a class="order-card" href="./order_detail.html?id=${encodeURIComponent(id)}">
-        <div class="order-card__title">${title}</div>
-        <div class="order-card__meta">
-          <span>상태: ${status}</span>
-          <span>결제: ${payment}</span>
-          <span>금액: ${amount}</span>
-          <span>${date}</span>
-        </div>
-        <div class="order-card__id">${esc(id)}</div>
-      </a>
-    `;
-  }).join("");
+function setTab(which) {
+  const isOrders = which === "orders";
+  tabOrders?.classList.toggle("tab--active", isOrders);
+  tabReviews?.classList.toggle("tab--active", !isOrders);
+  if (viewOrders) viewOrders.style.display = isOrders ? "" : "none";
+  if (viewReviews) viewReviews.style.display = isOrders ? "none" : "";
 }
 
-onAuthReady(async ({ user, profile }) => {
-  if (!user) {
-    setMsg("로그인 후 확인할 수 있습니다.");
-    renderList([]);
-    return;
+function toMs(v) {
+  if (!v) return 0;
+  // Firestore Timestamp
+  if (typeof v === "object") {
+    if (typeof v.toDate === "function") return v.toDate().getTime();
+    if (typeof v.seconds === "number") return v.seconds * 1000;
   }
+  // Date or ms
+  if (typeof v === "number") return v;
+  // ISO string
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : 0;
+  }
+  return 0;
+}
 
-  setMsg("주문 내역을 불러오는 중...");
-
+function fmtTs(ts) {
+  const ms = toMs(ts);
+  if (!ms) return "";
   try {
-    const isAdmin =
-      profile?.isAdmin === true ||
-      profile?.role === "admin" ||
-      (Array.isArray(profile?.roles) && profile.roles.includes("admin"));
+    return new Date(ms).toLocaleString();
+  } catch {
+    return "";
+  }
+}
 
-    const col = collection(db, "orders");
+function statusChip(status) {
+  const v = String(status || "").toLowerCase();
 
-    // 사용자: 내 주문만 (rules의 list 조건과 정확히 일치)
-    // 관리자: 전체를 보려면 admin 페이지에서 별도 구현 권장.
-    // 여기서는 관리자도 "내 주문" 개념을 유지해 buyerUid==uid로 동일하게 가져옵니다.
-    const q = query(
-      col,
-      where("buyerUid", "==", user.uid),
-      limit(50)
-    );
+  // 표시 라벨(사용자 친화)
+  const label =
+    (v === "paid" || v === "pending") ? "결제확인 대기" :
+    (v === "confirmed") ? "결제확인 완료" :
+    (v === "settled" || v === "completed") ? "정산 완료" :
+    (v === "canceled") ? "취소" :
+    (v ? v.toUpperCase() : "UNKNOWN");
 
-    const snap = await getDocs(q);
-    const rows = [];
-    snap.forEach((d) => rows.push({ _id: d.id, ...d.data() }));
+  const cls =
+    (v === "canceled") ? "chip chip--bad" :
+    (v === "paid" || v === "pending" || v === "confirmed" || v === "settled" || v === "completed") ? "chip chip--ok" :
+    "chip";
 
-    // 정렬은 클라에서(인덱스/규칙 단순화)
-    rows.sort((a, b) => {
-      const ta = a.payProofUpdatedAt?.seconds || a.updatedAt?.seconds || a.createdAt?.seconds || 0;
-      const tb = b.payProofUpdatedAt?.seconds || b.updatedAt?.seconds || b.createdAt?.seconds || 0;
-      return tb - ta;
-    });
+  return `<span class="${cls}">${esc(label)}</span>`;
+}
 
-    setMsg("");
-    renderList(rows);
+async function getItem(itemId) {
+  if (!itemId) return null;
+  const snap = await getDoc(doc(db, "items", itemId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+function renderOrderCard(o, item) {
+  const title = item?.title || o.itemTitle || "(상품명 없음)";
+  const price = item?.price ?? o.price ?? "";
+  const when = fmtTs(o.createdAt);
+
+  return `
+  <article class="card card--row">
+    <div class="card-body">
+      <div class="card-title">${esc(title)} ${statusChip(o.status)}</div>
+      <div class="card-meta">
+        <span>주문ID: ${esc(o.id)}</span>
+        ${when ? `<span>· ${esc(when)}</span>` : ""}
+        ${price !== "" ? `<span>· ${esc(price)}</span>` : ""}
+      </div>
+      <div class="card-actions">
+        ${item?.id ? `<a class="btn btn-sm" href="/item.html?id=${encodeURIComponent(item.id)}">상품 보기</a>` : ""}
+        ${(["settled","completed"].includes(String(o.status||"").toLowerCase()))
+          ? `<a class="btn btn-sm btn-ghost" href="/review.html?order=${encodeURIComponent(o.id)}">리뷰 작성/수정</a>`
+          : ""}
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderMyReviewCard(r, item) {
+  const title = item?.title || "(상품명 없음)";
+  const when = fmtTs(r.createdAt);
+  const rating = Math.max(0, Math.min(5, Number(r.rating || 0)));
+  const stars = "★★★★★".slice(0, rating) + "☆☆☆☆☆".slice(0, 5 - rating);
+
+  return `
+  <article class="card card--row">
+    <div class="card-body">
+      <div class="card-title">${esc(title)}</div>
+      <div class="card-meta">
+        <span>${esc(stars)} (${esc(rating)})</span>
+        ${when ? `<span>· ${esc(when)}</span>` : ""}
+        ${r.visible === false ? `<span class="chip chip--warn">비공개</span>` : ""}
+      </div>
+      ${r.text ? `<div class="card-text">${esc(r.text)}</div>` : ""}
+      ${r.guideReply ? `<div class="card-reply">가이드 답변: ${esc(r.guideReply)}</div>` : ""}
+      ${r.adminReply ? `<div class="card-reply">관리자 답변: ${esc(r.adminReply)}</div>` : ""}
+      <div class="card-actions">
+        ${item?.id ? `<a class="btn btn-sm" href="/item.html?id=${encodeURIComponent(item.id)}">상품 보기</a>` : ""}
+        <a class="btn btn-sm btn-ghost" href="/review.html?order=${encodeURIComponent(r.orderId || r.id)}">리뷰 열기</a>
+      </div>
+    </div>
+  </article>`;
+}
+
+async function loadOrders(uid) {
+  ordersList.innerHTML = "";
+  setState("주문 불러오는 중...");
+
+  // 복합 인덱스 회피: where만 사용
+  const q = query(
+    collection(db, "orders"),
+    where("buyerUid", "==", uid),
+    limit(300)
+  );
+
+  const snap = await getDocs(q);
+  const rows = [];
+  snap.forEach((d) => rows.push({ id: d.id, ...d.data(), _t: toMs(d.data()?.createdAt) }));
+
+  rows.sort((a, b) => (b._t || 0) - (a._t || 0));
+  const top = rows.slice(0, 50);
+
+  if (!top.length) {
+    setState("주문이 없습니다.", "muted");
+    return;
+  }
+
+  setState("");
+
+  const html = [];
+  for (const o of top) {
+    let item = null;
+    try { item = await getItem(o.itemId); } catch {}
+    html.push(renderOrderCard(o, item));
+  }
+  ordersList.innerHTML = html.join("");
+}
+
+async function loadMyReviews(uid) {
+  myReviewsList.innerHTML = "";
+  setState("내 리뷰 불러오는 중...");
+
+  // 1) SSOT(top-level reviews) 우선 로드
+  //    복합 인덱스 회피: where만 사용
+  const q1 = query(
+    collection(db, "reviews"),
+    where("authorUid", "==", uid),
+    limit(300)
+  );
+
+  const snap1 = await getDocs(q1);
+  const rows1 = [];
+  snap1.forEach((d) => rows1.push({ id: d.id, ...d.data(), _t: toMs(d.data()?.createdAt) }));
+
+  // 2) 레거시(items/{itemId}/reviews/{uid})에만 존재하는 경우가 있어 fallback
+  //    - 내 주문을 기준으로 각 주문의 리뷰를 찾아 수집
+  if (rows1.length === 0) {
+    try {
+      const oq = query(
+        collection(db, "orders"),
+        where("buyerUid", "==", uid),
+        limit(200)
+      );
+      const os = await getDocs(oq);
+
+      const legacy = [];
+      for (const d of os.docs) {
+        const o = { id: d.id, ...(d.data() || {}) };
+        const orderId = o.id;
+        const itemId = o.itemId || "";
+
+        // 혹시 SSOT가 orderId 문서로 존재하면 그걸 우선
+        try {
+          const rs = await getDoc(doc(db, "reviews", orderId));
+          if (rs.exists()) {
+            const r = rs.data() || {};
+            if ((r.authorUid || "") === uid) {
+              legacy.push({ id: rs.id, ...r, _t: toMs(r.createdAt), orderId });
+              continue;
+            }
+          }
+        } catch {}
+
+        // 레거시: items/{itemId}/reviews/{uid}
+        if (itemId) {
+          try {
+            const ls = await getDoc(doc(db, "items", itemId, "reviews", uid));
+            if (ls.exists()) {
+              const r = ls.data() || {};
+              // 레거시 데이터는 orderId/authorUid가 없을 수 있으니 보정
+              legacy.push({
+                id: `${itemId}:${uid}`,
+                orderId,
+                itemId,
+                itemTitle: r.itemTitle || o.itemTitle || "",
+                guideUid: r.guideUid || o.guideUid || o.ownerUid || "",
+                authorUid: uid,
+                authorName: r.authorName || "",
+                rating: r.rating || 0,
+                text: r.text || r.comment || "",
+                visible: r.visible !== false,
+                guideReply: r.guideReply || "",
+                adminReply: r.adminReply || "",
+                createdAt: r.createdAt || o.createdAt || null,
+                _t: toMs(r.createdAt || o.createdAt),
+              });
+            }
+          } catch {}
+        }
+      }
+
+      rows1.push(...legacy);
+    } catch (e) {
+      // fallback 실패는 조용히 무시하고 "리뷰 없음" 처리
+      console.warn("legacy reviews fallback failed", e);
+    }
+  }
+
+  rows1.sort((a, b) => (b._t || 0) - (a._t || 0));
+  const top = rows1.slice(0, 50);
+
+  if (!top.length) {
+    setState("작성한 리뷰가 없습니다.", "muted");
+    return;
+  }
+
+  setState("");
+
+  const html = [];
+  for (const r of top) {
+    let item = null;
+    try { item = await getItem(r.itemId); } catch {}
+    html.push(renderMyReviewCard(r, item));
+  }
+  myReviewsList.innerHTML = html.join("");
+}
+
+async function reload() {
+  const user = auth.currentUser;
+  if (!user) {
+    setState("로그인이 필요합니다.", "bad");
+    ordersList.innerHTML = "";
+    myReviewsList.innerHTML = "";
+    return;
+  }
+
+  if (tabOrders?.classList.contains("tab--active")) {
+    await loadOrders(user.uid);
+  } else {
+    await loadMyReviews(user.uid);
+  }
+}
+
+tabOrders?.addEventListener("click", async () => {
+  setTab("orders");
+  await reload();
+});
+
+tabReviews?.addEventListener("click", async () => {
+  setTab("reviews");
+  await reload();
+});
+
+btnReload?.addEventListener("click", reload);
+
+onAuthReady(async () => {
+  try {
+    setTab("orders");
+    await reload();
   } catch (e) {
     console.error(e);
-    setMsg(e?.message || String(e));
-    renderList([]);
+    setState("권한 또는 네트워크 문제로 데이터를 읽지 못했습니다.", "bad");
   }
 });
