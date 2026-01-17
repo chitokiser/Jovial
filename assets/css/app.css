@@ -20,7 +20,13 @@
 }
 
 *{ box-sizing:border-box; }
-html,body{ height:100%; }
+
+html,body{
+  height:100%;
+  width:100%;
+  overflow-x:hidden; /* 모바일 가로삐짐 방지 핵심 */
+}
+
 body{
   margin:0;
   background:
@@ -33,10 +39,26 @@ body{
 
 a{ color:inherit; }
 
+/* 미디어 기본 안전장치 (이미지/영상이 컨테이너 넘지 않게) */
+img, video, canvas, svg{
+  max-width:100%;
+  height:auto;
+  display:block;
+}
+
 .page{
   max-width:var(--max);
   margin:0 auto;
   padding:22px var(--pad) 60px;
+  width:100%;
+  overflow-x:hidden; /* 내부 요소가 삐져도 페이지 전체는 안 밀리게 */
+}
+
+/* 작은 화면에서 패딩이 더 안전하게 느껴지도록 약간만 조정 */
+@media (max-width: 420px){
+  .page{
+    padding:18px 14px 56px;
+  }
 }
 
 .title{
@@ -55,6 +77,8 @@ a{ color:inherit; }
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding:18px;
+  width:100%;
+  max-width:100%;
 }
 
 .btn{
@@ -117,18 +141,13 @@ a{ color:inherit; }
   color: var(--warn);
 }
 
-.muted{
-  color: var(--muted);
-}
-
+.muted{ color: var(--muted); }
 .hide{ display:none !important; }
 
 .state{
   margin:12px 0 14px;
   color: var(--muted);
 }
-
-.muted{ color:var(--muted); }
 
 .footer{
   border-top:1px solid var(--line2);

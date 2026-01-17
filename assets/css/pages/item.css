@@ -1,10 +1,25 @@
 /* /assets/css/pages/item.css */
 
-.item-page{ padding: 10px 0 36px; }
+.item-page{
+  padding: 10px 0 36px;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
 
-.item-panel{ padding: 14px; }
+.item-panel{
+  padding: 14px;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
 
-.item-box{ margin-top: 12px; }
+.item-box{
+  margin-top: 12px;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
 
 .item-head{
   display:flex;
@@ -86,6 +101,8 @@
   grid-template-columns: 1fr;
   gap: 14px;
   align-items:start;
+  width:100%;
+  max-width:100%;
 }
 
 @media (min-width: 1020px){
@@ -100,6 +117,8 @@
   background: rgba(255,255,255,.03);
   border-radius:16px;
   overflow:hidden;
+  width:100%;
+  max-width:100%;
 }
 
 .card-head{
@@ -119,6 +138,9 @@
 
 .card-body{
   padding: 14px;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
 }
 
 .sticky{
@@ -280,6 +302,7 @@ details[open] > .ibox-sum::after{ content: "▴"; }
   color: var(--text);
   border-radius:12px;
   padding:10px 12px;
+  max-width:100%;
 }
 
 .review-row select{ height:40px; }
@@ -362,6 +385,7 @@ details[open] > .ibox-sum::after{ content: "▴"; }
   background: rgba(255,255,255,.04);
   color: var(--text);
   padding: 0 12px;
+  max-width:100%;
 }
 
 .ta{
@@ -373,13 +397,16 @@ details[open] > .ibox-sum::after{ content: "▴"; }
   color: var(--text);
   padding:10px 12px;
   resize:vertical;
+  max-width:100%;
 }
 
-/* Slider (기존 유지) */
+/* Slider */
 .images.slider{
   display:flex;
   flex-direction:column;
   gap:10px;
+  width:100%;
+  max-width:100%;
 }
 
 .slider-main{
@@ -388,32 +415,49 @@ details[open] > .ibox-sum::after{ content: "▴"; }
   overflow:hidden;
   border:1px solid rgba(255,255,255,.10);
   background: rgba(0,0,0,.28);
+  width:100%;
+  max-width:100%;
+}
+
+/* 데스크탑에서 이미지가 안 잘리도록 프레임을 비율로 고정 */
+@media (min-width: 720px){
+  .slider-main{
+    aspect-ratio: 16 / 9;   /* 필요하면 4/3 으로 바꿔도 됨 */
+  }
 }
 
 .slider-track{
   display:flex;
   width:100%;
+  max-width:100%;
   will-change: transform;
   touch-action: pan-y;
+  height:100%;
 }
 
 .slider-track.is-dragging{ transition: none !important; }
 
 .slider-slide{
   min-width:100%;
+  width:100%;
   user-select:none;
+  height:100%;
 }
 
 .slider-slide img{
   width:100%;
   height: 240px;
-  object-fit: cover;
+  object-fit: cover; /* 모바일은 보기 좋게 cover 유지 */
   display:block;
   background: rgba(0,0,0,.25);
 }
 
+/* 데스크탑에서는 contain으로 바꿔서 원본이 절대 안 잘리게 */
 @media (min-width: 720px){
-  .slider-slide img{ height: 360px; }
+  .slider-slide img{
+    height:100%;
+    object-fit: contain;
+  }
 }
 
 .slider-nav{
@@ -459,9 +503,13 @@ details[open] > .ibox-sum::after{ content: "▴"; }
 .slider-thumbs{
   display:flex;
   gap:8px;
-  overflow:auto;
+  overflow-x:auto;
+  overflow-y:hidden;
+  max-width:100%;
   padding-bottom:2px;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .slider-thumbs::-webkit-scrollbar{ height: 8px; }
@@ -477,14 +525,13 @@ details[open] > .ibox-sum::after{ content: "▴"; }
   cursor:pointer;
 }
 
+.slider-thumb.is-active{
+  box-shadow: 0 0 0 2px rgba(255,255,255,.38);
+}
+
 .slider-thumb img{
   width:100%;
   height:100%;
   object-fit: cover;
   display:block;
-}
-
-.slider-thumb.is-active{
-  outline: 2px solid rgba(255,255,255,.38);
-  outline-offset: 2px;
 }
