@@ -118,7 +118,7 @@ function renderOrderCard(o, item) {
       </div>
       <div class="card-actions">
         ${item?.id ? `<a class="btn btn-sm" href="/item.html?id=${encodeURIComponent(item.id)}">상품 보기</a>` : ""}
-        ${(["settled","completed"].includes(String(o.status||"").toLowerCase()))
+        ${(["confirmed","settled","completed"].includes(String(o.status||"").toLowerCase()))
           ? `<a class="btn btn-sm btn-ghost" href="/review.html?order=${encodeURIComponent(o.id)}">리뷰 작성/수정</a>`
           : ""}
       </div>

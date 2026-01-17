@@ -17,7 +17,12 @@ import {
   addDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-const $ = (s) => document.querySelector(s);
+function $(s) {
+  if (!s) return null;
+  const c = s[0];
+  if (c === '#' || c === '.' || c === '[') return document.querySelector(s);
+  return document.getElementById(s);
+}
 
 function esc(s) {
   return String(s ?? "")
@@ -26,6 +31,17 @@ function esc(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizeInfoLines(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) {
+    return v.map(x => String(x ?? '').trim()).filter(Boolean).map(s => s.replace(/^[-•*]+\s*/, ''));
+  }
+  if (typeof v === 'string') {
+    return v.split(/\r?\n/).map(s => s.trim()).filter(Boolean).map(s => s.replace(/^[-•*]+\s*/, ''));
+  }
+  return [];
 }
 
 function safeText(id, text) {
@@ -137,12 +153,24 @@ function getIdFromQuery() {
 function renderItem({ id, data, viewerUid, viewerIsAdmin }) {
   const title = data.title || "(제목 없음)";
   const status = data.status || "-";
-  const ownerUid = data.ownerUid || "-";
+  const ownerUid = data.ownerUid || data.guideUid || "-";
   const category = toTextCategory(data.category);
-  const price = Number.isFinite(data.price) ? data.price : 0;
-  const location = data.location || "-";
-  const desc = data.desc || "";
-  const images = Array.isArray(data.images) ? data.images : [];
+  const price = Number.isFinite(data.price) ? data.price : (Number.isFinite(data.amount) ? data.amount : 0);
+  const location = data.location || data.region || "-";
+  const desc = data.desc || data.summary || "";
+
+  // 포함/불포함/준비물: 배열(string[]) / 여러줄 문자열(string) 모두 지원
+  const includes = normalizeInfoLines(data.includes ?? data.included ?? data.include ?? data.includeItems);
+  const excludes = normalizeInfoLines(data.excludes ?? data.excluded ?? data.exclude ?? data.excludeItems);
+  const preps = normalizeInfoLines(data.preps ?? data.preparations ?? data.preparation ?? data.prepsText);
+
+  // 이미지: string[] 또는 {url}[] 모두 지원
+  const rawImages = Array.isArray(data.images) ? data.images : [];
+  const images = rawImages
+    .map((x) => (typeof x === 'string' ? x : (x && typeof x === 'object' ? (x.url || x.src || '') : '')))
+    .map((s) => String(s || '').trim())
+    .filter(Boolean);
+
   const rejectedReason = data.rejectedReason || "";
 
   const isOwner = viewerUid && ownerUid === viewerUid;
@@ -153,6 +181,54 @@ function renderItem({ id, data, viewerUid, viewerIsAdmin }) {
   safeText("itPrice", String(price));
   safeText("itLocation", location);
   safeText("itDesc", desc || "(설명 없음)");
+
+  // 전체 데이터(운영/디버그): Firestore Timestamp 등을 보기 쉽게 변환
+  const rawEl = $("itRaw");
+  if (rawEl) {
+    const toPlain = (v) => {
+      if (v && typeof v === "object") {
+        // Firestore Timestamp {seconds,nanoseconds}
+        if (typeof v.seconds === "number" && typeof v.nanoseconds === "number") {
+          return { _type: "Timestamp", seconds: v.seconds, nanoseconds: v.nanoseconds };
+        }
+        // Date
+        if (v instanceof Date) return v.toISOString();
+        // Array
+        if (Array.isArray(v)) return v.map(toPlain);
+        // Plain object
+        const out = {};
+        for (const k of Object.keys(v)) out[k] = toPlain(v[k]);
+        return out;
+      }
+      return v;
+    };
+
+    try {
+      rawEl.textContent = JSON.stringify(toPlain(data), null, 2);
+    } catch (e) {
+      rawEl.textContent = String(e?.message || e);
+    }
+  }
+
+  // 포함/불포함/준비물
+  const hasInfo3 = (includes.length + excludes.length + preps.length) > 0;
+  const box3 = $("itInfo3");
+  if (box3) box3.style.display = hasInfo3 ? "grid" : "none";
+
+  function renderUl(targetId, arr){
+    const el = $(targetId);
+    if (!el) return;
+    const list = (arr || []).map(v=>String(v || "").trim()).filter(Boolean);
+    if (!list.length){
+      el.innerHTML = `<div class="empty">-</div>`;
+      return;
+    }
+    el.innerHTML = `<ul class="info-list">${list.map(s=>`<li>${esc(s)}</li>`).join("")}</ul>`;
+  }
+
+  renderUl("itIncludes", includes);
+  renderUl("itExcludes", excludes);
+  renderUl("itPreps", preps);
 
   const meta = $("#itMeta");
   if (meta) {
@@ -177,23 +253,124 @@ function renderItem({ id, data, viewerUid, viewerIsAdmin }) {
   }
 
   const imgWrap = $("#itImages");
-  if (imgWrap) {
-    if (!images.length) {
-      imgWrap.innerHTML = `<div class="empty">이미지가 없습니다.</div>`;
-    } else {
-      imgWrap.innerHTML = images
-        .slice(0, 12)
-        .map((u) => {
-          const url = String(u || "").trim();
-          if (!url) return "";
-          return `
-            <a class="img" href="${esc(url)}" target="_blank" rel="noopener">
-              <img src="${esc(url)}" alt="image" loading="lazy" />
-            </a>
-          `;
-        })
-        .join("");
+  const imgCount = $("itImageCount");
+
+  function renderSlider(container, arr){
+    const list = (arr || []).map(v => String(v || "").trim()).filter(Boolean).slice(0, 20);
+    if (!container) return;
+    if (!list.length){
+      container.innerHTML = `<div class="empty">이미지가 없습니다.</div>`;
+      return;
     }
+
+    container.innerHTML = `
+      <div class="slider-main" id="itSliderMain">
+        <div class="slider-track" id="itSliderTrack">
+          ${list.map((u)=>`
+            <div class="slider-slide">
+              <img src="${esc(u)}" alt="image" loading="lazy" draggable="false" />
+            </div>
+          `).join("")}
+        </div>
+        <div class="slider-nav" aria-hidden="true">
+          <button class="slider-btn prev" type="button" id="itSlidePrev" aria-label="prev">‹</button>
+          <button class="slider-btn next" type="button" id="itSlideNext" aria-label="next">›</button>
+          <div class="slider-count" id="itSlideCount"></div>
+        </div>
+      </div>
+      <div class="slider-thumbs" id="itSliderThumbs">
+        ${list.map((u,i)=>`
+          <div class="slider-thumb ${i===0?"is-active":""}" data-idx="${i}" title="${i+1}">
+            <img src="${esc(u)}" alt="thumb" loading="lazy" draggable="false" />
+          </div>
+        `).join("")}
+      </div>
+    `;
+
+    let idx = 0;
+    const main = $("itSliderMain");
+    const track = $("itSliderTrack");
+    const btnPrev = $("itSlidePrev");
+    const btnNext = $("itSlideNext");
+    const countEl = $("itSlideCount");
+    const thumbs = Array.from(container.querySelectorAll(".slider-thumb"));
+
+    function setActiveThumb(k){
+      thumbs.forEach((t) => t.classList.toggle("is-active", Number(t.dataset.idx) === k));
+    }
+
+    function update(){
+      if (!track) return;
+      const w = main ? main.clientWidth : 0;
+      track.style.transform = `translateX(${-idx * w}px)`;
+      setActiveThumb(idx);
+      if (countEl) countEl.textContent = `${idx + 1} / ${list.length}`;
+    }
+
+    function go(n){
+      idx = Math.max(0, Math.min(list.length - 1, n));
+      update();
+    }
+
+    btnPrev?.addEventListener("click", () => go(idx - 1));
+    btnNext?.addEventListener("click", () => go(idx + 1));
+
+    thumbs.forEach((t) => {
+      t.addEventListener("click", () => {
+        const k = Number(t.dataset.idx || 0);
+        go(k);
+      });
+    });
+
+    // Drag/Swipe (pointer events)
+    if (main && track){
+      let isDown = false;
+      let startX = 0;
+      let startT = 0;
+
+      const getX = (ev) => (typeof ev.clientX === "number" ? ev.clientX : 0);
+
+      const onDown = (ev) => {
+        if (list.length <= 1) return;
+        isDown = true;
+        startX = getX(ev);
+        startT = -idx * main.clientWidth;
+        track.classList.add("is-dragging");
+        try { main.setPointerCapture(ev.pointerId); } catch(_){ }
+      };
+
+      const onMove = (ev) => {
+        if (!isDown) return;
+        const dx = getX(ev) - startX;
+        track.style.transform = `translateX(${startT + dx}px)`;
+      };
+
+      const onUp = (ev) => {
+        if (!isDown) return;
+        isDown = false;
+        track.classList.remove("is-dragging");
+        const dx = getX(ev) - startX;
+        const threshold = Math.max(50, main.clientWidth * 0.18);
+        if (dx <= -threshold) go(idx + 1);
+        else if (dx >= threshold) go(idx - 1);
+        else update();
+      };
+
+      main.addEventListener("pointerdown", onDown);
+      main.addEventListener("pointermove", onMove);
+      main.addEventListener("pointerup", onUp);
+      main.addEventListener("pointercancel", onUp);
+      main.addEventListener("lostpointercapture", onUp);
+
+      window.addEventListener("resize", () => update());
+    }
+
+    update();
+  }
+
+  if (imgWrap) {
+    if (imgCount) imgCount.textContent = images.length ? `(${images.slice(0,20).length}장)` : "";
+    renderSlider(imgWrap, images);
   }
 
   return { ownerUid, status, title, price };

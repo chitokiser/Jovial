@@ -71,7 +71,8 @@ async function saveReview({ order, item, user }) {
     orderId,
     itemId: order.itemId || "",
     itemTitle: item?.title || order.itemTitle || "",
-    guideUid: order.ownerUid || "",
+    // 주문 스키마 혼재 방어: guideUid(신규) / ownerUid(레거시)
+    guideUid: order.guideUid || order.ownerUid || "",
     authorUid: user.uid,
     authorName: user.displayName || user.email || "buyer",
 

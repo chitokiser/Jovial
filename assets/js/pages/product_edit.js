@@ -1,8 +1,10 @@
 // /assets/js/pages/product_edit.js
+// 상품 수정: 20장 이미지 + 포함/불포함/준비물(배열 저장) 통합
+
 import { db, onAuthReady } from "../auth.js";
 import { doc, getDoc, updateDoc, serverTimestamp } from "../firestore-bridge.js";
 
-function $(id){ return document.getElementById(id); }
+const $ = (id) => document.getElementById(id);
 
 function setMsg(t){
   const el = $("saveMsg");
@@ -13,17 +15,43 @@ function qs(name){
   return new URLSearchParams(location.search).get(name);
 }
 
+function v(id){
+  const el = $(id);
+  return el ? String(el.value || "").trim() : "";
+}
+
+function parseLines(text){
+  return String(text || "")
+    .split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => s.replace(/^[-•*]+\s*/, ""));
+}
+
+function linesToText(v){
+  if(!v) return "";
+  if(Array.isArray(v)) return v.map(x => String(x ?? "").trim()).filter(Boolean).join("\n");
+  if(typeof v === "string") return v.trim();
+  return "";
+}
+
 function uniqNonEmpty(arr){
   const out = [];
   const set = new Set();
-  for(const v of (arr || [])){
-    const s = String(v || "").trim();
+  for(const x of (arr || [])){
+    const s = String(x || "").trim();
     if(!s) continue;
     if(set.has(s)) continue;
     set.add(s);
     out.push(s);
   }
   return out;
+}
+
+function normalizeImages(data){
+  // string[] 또는 {url}[] 모두 지원
+  const raw = Array.isArray(data?.images) ? data.images : (data?.imageUrl ? [data.imageUrl] : []);
+  return uniqNonEmpty(raw.map(x => (typeof x === "string") ? x : (x && typeof x === "object" ? (x.url || x.src || "") : "")));
 }
 
 onAuthReady(async ({ loggedIn, role, user })=>{
@@ -64,21 +92,27 @@ onAuthReady(async ({ loggedIn, role, user })=>{
     return;
   }
 
-  // 폼 채우기
+  // ===== 폼 채우기 =====
   $("pTitle").value = data.title || "";
   $("pCategory").value = data.category || "";
-  $("pRegion").value = data.region || "";
+  $("pRegion").value = data.region || data.location || "";
   $("pPrice").value = (data.price ?? "") === null ? "" : String(data.price ?? "");
   $("pCurrency").value = data.currency || "KRW";
   $("pDesc").value = data.desc || "";
 
-  const images = Array.isArray(data.images) ? data.images : (data.imageUrl ? [data.imageUrl] : []);
-  const imgs = uniqNonEmpty(images).slice(0,4);
-  $("pImage1").value = imgs[0] || "";
-  $("pImage2").value = imgs[1] || "";
-  $("pImage3").value = imgs[2] || "";
-  $("pImage4").value = imgs[3] || "";
+  // info3 (여러 키 호환)
+  $("pIncludes").value = linesToText(data.includes ?? data.included ?? data.include ?? data.includeItems);
+  $("pExcludes").value = linesToText(data.excludes ?? data.excluded ?? data.exclude ?? data.excludeItems);
+  $("pPreparations").value = linesToText(data.preps ?? data.preparations ?? data.preparation ?? data.prepsText);
 
+  // images: 최대 20
+  const imgs = normalizeImages(data).slice(0, 20);
+  for(let i=0;i<20;i++){
+    const el = $(`pImage${i+1}`);
+    if(el) el.value = imgs[i] || "";
+  }
+
+  // ===== 저장 =====
   form.addEventListener("submit", async (ev)=>{
     ev.preventDefault();
     setMsg("");
@@ -87,20 +121,21 @@ onAuthReady(async ({ loggedIn, role, user })=>{
     if(btn) btn.disabled = true;
 
     try{
-      const title = ($("pTitle").value || "").trim();
-      const category = ($("pCategory").value || "").trim();
-      const region = ($("pRegion").value || "").trim();
-      const priceRaw = ($("pPrice").value || "").trim();
+      const title = v("pTitle");
+      const category = v("pCategory");
+      const region = v("pRegion");
+      const priceRaw = v("pPrice");
       const price = priceRaw === "" ? "" : Number(priceRaw);
-      const currency = ($("pCurrency").value || "KRW").trim();
-      const desc = ($("pDesc").value || "").trim();
+      const currency = v("pCurrency") || "KRW";
+      const desc = v("pDesc");
 
-      const newImages = uniqNonEmpty([
-        ($("pImage1")?.value || "").trim(),
-        ($("pImage2")?.value || "").trim(),
-        ($("pImage3")?.value || "").trim(),
-        ($("pImage4")?.value || "").trim(),
-      ]).slice(0,4);
+      const includes = parseLines(v("pIncludes"));
+      const excludes = parseLines(v("pExcludes"));
+      const preps = parseLines(v("pPreparations"));
+
+      const imagesRaw = Array.from({ length: 20 }, (_, i) => v(`pImage${i + 1}`)).filter(Boolean);
+      const images = uniqNonEmpty(imagesRaw).slice(0, 20);
+      const imageUrl = images[0] || "";
 
       if(!title || !category || !region){
         alert("상품명/카테고리/지역은 필수입니다.");
@@ -115,13 +150,19 @@ onAuthReady(async ({ loggedIn, role, user })=>{
         title,
         category,
         region,
+        location: region,
         price,
         currency,
         desc,
-        images: newImages,
-        imageUrl: newImages[0] || "",
 
-        // 수정 시 재검수(가이드가 published 상태를 유지할 수 없게)
+        includes,
+        excludes,
+        preps,
+
+        images,
+        imageUrl,
+
+        // 수정 시 재검수(가이드가 published 유지 불가)
         status: (role === "admin") ? (data.status || "pending") : "pending",
 
         updatedAt: serverTimestamp(),

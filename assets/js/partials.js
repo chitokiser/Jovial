@@ -9,6 +9,26 @@
     return new URL(urlPath, window.location.origin).toString();
   }
 
+  function ensureCss(urlPath){
+    // 모든 페이지에서 footer.css를 확실히 적용 (특정 페이지에서 로고 확대/텍스트 세로쪼개짐 방지)
+    try{
+      const url = abs(urlPath);
+      const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
+      const already = links.some((l) => {
+        const h = String(l.href || "").split("?")[0];
+        return h === String(url).split("?")[0];
+      });
+      if (already) return;
+
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = urlPath; // 루트 경로 유지
+      document.head.appendChild(link);
+    }catch(e){
+      console.warn("ensureCss failed:", e?.message || e);
+    }
+  }
+
   async function loadInto(id, urlPath) {
     const el = document.getElementById(id);
     if (!el) return false;
@@ -24,6 +44,9 @@
 
   async function mount(){
     try{
+      // footer.css 누락 페이지(예: item.html)에서도 푸터 스타일을 강제 적용
+      ensureCss("/assets/css/footer.css");
+
       // 루트 기준으로 고정
       await loadInto("siteHeader", "/partials/header.html");
       await loadInto("siteFooter", "/partials/footer.html");

@@ -1,8 +1,10 @@
 // /assets/js/pages/admin_orders.js
 // 관리자 주문관리
+// 임시 결제완료(=결제확인) 처리 패치
 // 흐름
-// - 구매자 checkout: orders.status = "paid"
-// - 관리자 결제확인: orders.status = "confirmed" + guideOrders 미러 생성
+// - 구매자 checkout: orders.status = "paid" (결제확인 대기)
+// - 관리자 결제확인: orders.status = "confirmed" (여기서 guideOrders 미러 생성은 하지 않음)
+//   - 이유: 현재 firestore.rules에 guideOrders 권한 규칙이 없어 batch.commit이 실패함
 // - 월정산 락: orders.status = "settled" (admin_settlement.js)
 
 import { onAuthReady } from "../auth.js";
@@ -17,8 +19,7 @@ import {
   getDocs,
   doc,
   getDoc,
-  setDoc,
-  writeBatch,
+  updateDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -133,37 +134,22 @@ async function confirmPaidOrder(orderId) {
 
   const settlementMonth = String(o0.settlementMonth || "").trim() || monthFromNow();
 
-  const batch = writeBatch(db);
-
-  // 1) orders 업데이트
-  batch.update(ref, {
+  // orders 업데이트 (임시 결제완료 확정)
+  // - guideOrders 미러를 만들지 않습니다.
+  // - 이유: 현재 firestore.rules에 guideOrders 권한 규칙이 없어 쓰기(배치)가 실패합니다.
+  // - 가이드 화면(guide_orders.js)은 orders에서 직접 조회하도록 별도 패치됩니다.
+  const patch = {
     status: "confirmed",
     guideUid,
     settlementMonth,
     confirmedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
 
-  // 2) guideOrders 미러 생성/갱신
-  const gref = doc(db, "guideOrders", guideUid, "orders", orderId);
-  batch.set(gref, {
-    orderId,
-    guideUid,
-    buyerUid: o0.buyerUid || "",
-    itemId: o0.itemId || "",
-    itemTitle: o0.itemTitle || "",
-    itemThumb: o0.itemThumb || "",
-    amount: o0.amount ?? "",
-    currency: o0.currency || "",
-    status: "confirmed",
-    settlementMonth,
-    createdAt: o0.createdAt || serverTimestamp(),
-    paidAt: o0.paidAt || null,
-    confirmedAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  // paidAt이 비어 있는 레거시 주문도 있어 방어
+  if (!o0.paidAt) patch.paidAt = serverTimestamp();
 
-  await batch.commit();
+  await updateDoc(ref, patch);
 }
 
 async function loadAdminOrders() {
